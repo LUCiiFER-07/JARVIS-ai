@@ -1,0 +1,10 @@
+[project]
+name = "jarvis-ai"
+version = "0.1.0"
+description = "A modular personal AI assistant inspired by JARVIS."
+readme = "README.md"
+requires-python = ">=3.13"
+
+authors = [
+    { name = "Pranjal Bhardwaj" }
+]
