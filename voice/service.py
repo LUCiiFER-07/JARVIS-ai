@@ -7,7 +7,6 @@ from pathlib import Path
 from speech.models import SpeechResult
 from speech.service import SpeechService
 from utils.logger import get_logger
-
 from voice.config import VoiceConfig
 from voice.manager import DeviceManager
 from voice.recorder import VoiceRecorder

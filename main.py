@@ -1,3 +1,6 @@
+from core.commands import CommandType
+from core.executor import CommandExecutor
+from core.parser import CommandParser
 from speech.exceptions import SpeechError
 from utils.logger import get_logger
 from voice.exceptions import VoiceError
@@ -5,6 +8,49 @@ from voice.service import VoiceService
 
 logger = get_logger(__name__)
 
+
+def process_command(
+    voice: VoiceService,
+    executor: CommandExecutor,
+) -> bool:
+    """
+    Record, transcribe, parse, and execute one command.
+
+    Returns:
+        False when JARVIS should stop.
+        True when JARVIS should continue listening.
+    """
+
+    result = voice.record_and_transcribe()
+
+    logger.info(
+        "Speech successfully transcribed."
+    )
+
+    print("\n📝 Transcription")
+    print("-" * 40)
+    print(result.text)
+
+    print("\nDetected Language:", result.language)
+
+    command = CommandParser.parse(
+        result.text
+    )
+
+    logger.info(
+        "Command detected: %s",
+        command.command_type.value,
+    )
+
+    response = executor.execute(
+        command
+    )
+
+    print("\n🤖 JARVIS")
+    print("-" * 40)
+    print(response)
+
+    return command.command_type is not CommandType.EXIT
 
 def main() -> None:
     """
@@ -15,40 +61,63 @@ def main() -> None:
         "JARVIS started."
     )
 
+    voice: VoiceService | None = None
+
     try:
         voice = VoiceService()
 
         voice.select_microphone()
 
-        result = voice.record_and_transcribe()
+        executor = CommandExecutor()
 
-        logger.info(
-            "Speech successfully transcribed."
-        )
+        print("\n" + "=" * 50)
+        print("🤖 JARVIS is ready.")
+        print("🎤 Listening for commands...")
+        print("Press Ctrl+C to stop.")
+        print("=" * 50)
 
-        print("\n📝 Transcription")
-        print("-" * 40)
-        print(result.text)
+        while True:
 
-        print("\nDetected Language:", result.language)
+            try:
+                should_continue = process_command(
+                    voice,
+                    executor,
+                )
 
-    except VoiceError as error:
+                if not should_continue:
+                    break
 
-        logger.error(
-            "Voice error: %s",
-            error,
-        )
+                print("\n🎤 Listening again...")
 
-        print(f"\n🎤 Voice Error: {error}")
+            except VoiceError as error:
 
-    except SpeechError as error:
+                logger.error(
+                    "Voice error: %s",
+                    error,
+                )
 
-        logger.error(
-            "Speech error: %s",
-            error,
-        )
+                print(
+                    f"\n🎤 Voice Error: {error}"
+                )
 
-        print(f"\n🗣 Speech Error: {error}")
+                print(
+                    "Returning to listening..."
+                )
+
+            except SpeechError as error:
+
+                logger.error(
+                    "Speech error: %s",
+                    error,
+                )
+
+                print(
+                    f"\n🗣 Speech Error: {error}"
+                )
+
+                print(
+                    "Returning to listening..."
+                )
 
     except KeyboardInterrupt:
 
@@ -56,7 +125,7 @@ def main() -> None:
             "Application interrupted by user."
         )
 
-        print("\n\nGoodbye!")
+        print("\n\nGoodbye, Sir!")
 
     except Exception:
 
@@ -64,7 +133,9 @@ def main() -> None:
             "Unexpected application error."
         )
 
-        print("\nUnexpected error occurred.")
+        print(
+            "\nUnexpected error occurred."
+        )
 
     finally:
 
@@ -75,3 +146,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

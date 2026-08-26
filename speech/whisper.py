@@ -5,12 +5,12 @@ Faster-Whisper speech recognizer.
 from pathlib import Path
 
 from faster_whisper import WhisperModel
-from utils.logger import get_logger
 
 from speech.config import SpeechConfig
 from speech.exceptions import ModelLoadError, SpeechRecognitionError
 from speech.models import SpeechResult
 from speech.recognizer import SpeechRecognizer
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 

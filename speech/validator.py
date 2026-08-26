@@ -3,12 +3,14 @@ Audio validation utilities.
 """
 
 from __future__ import annotations
-from typing import ClassVar
 
 from pathlib import Path
-from speech.exceptions import AudioValidationError
+from typing import ClassVar
+
 import numpy as np
 import soundfile as sf
+
+from speech.exceptions import AudioValidationError
 
 
 class AudioValidator:

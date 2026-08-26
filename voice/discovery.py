@@ -3,8 +3,8 @@ Audio device discovery utilities.
 """
 
 import sounddevice as sd
-from utils.logger import get_logger
 
+from utils.logger import get_logger
 from voice.device import AudioDevice
 
 logger = get_logger(__name__)

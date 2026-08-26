@@ -4,16 +4,16 @@ Voice recording module for JARVIS.
 This module records audio from the default microphone and saves it as a WAV file.
 """
 
+import time
 from collections import deque
 from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
-import time
-from utils.logger import get_logger
 
 import voice.config
+from utils.logger import get_logger
 from voice.exceptions import RecordingError
 from voice.vad import VADConfig, VoiceActivityDetector
 
@@ -71,23 +71,48 @@ class VoiceRecorder:
 
     def _create_stream(self) -> sd.InputStream:
         """
-        Creeate an audio input stream.
+        Create an audio input stream using the number of channels
+        supported by the selected microphone.
         """
+
+        device_info = sd.query_devices(
+            self.config.device,
+        )
+
+        max_input_channels = int(
+            device_info["max_input_channels"]
+        )
+
+        if max_input_channels <= 0:
+            raise RecordingError(
+                "Selected device has no input channels."
+            )
+
+        # Use stereo when available, otherwise fall back to mono.
+        channels = min(max_input_channels, 2)
+
+        logger.info(
+            "Opening microphone stream | Device=%s | Channels=%d | Sample Rate=%d Hz",
+            self.config.device,
+            channels,
+            self.config.sample_rate,
+        )
 
         return sd.InputStream(
             samplerate=self.config.sample_rate,
-            channels=self.config.channels,
+            channels=channels,
             dtype="float32",
             device=self.config.device,
             blocksize=self._frame_size(),
         )
 
     def _read_frame(
-            self,
-            stream: sd.InputStream,
+        self,
+        stream: sd.InputStream,
     ) -> np.ndarray:
         """
-        Read one frame from the microphone.
+        Read one frame from the microphone and convert stereo
+        input to mono audio.
         """
 
         frame, overflowed = stream.read(
@@ -97,6 +122,14 @@ class VoiceRecorder:
         if overflowed:
             logger.warning(
                 "Audio input overflow detected."
+            )
+
+        # Convert stereo → mono.
+        if frame.ndim == 2 and frame.shape[1] > 1:
+            frame = np.mean(
+                frame,
+                axis=1,
+                keepdims=True,
             )
 
         return frame
@@ -174,6 +207,8 @@ class VoiceRecorder:
 
         with self._create_stream() as stream:
 
+            self._calibrate(stream)
+
             logger.info("Listening...")
 
             while True:
@@ -183,7 +218,6 @@ class VoiceRecorder:
                 self._store_pre_roll(frame)
 
                 speech, _ = self.vad.process(frame)
-
                 # -------------------------
                 # Waiting for speech
                 # -------------------------
@@ -304,3 +338,40 @@ class VoiceRecorder:
             raise RecordingError(
                 "Failed to record audio."
         ) from error
+
+    def _calibrate(
+        self,
+        stream: sd.InputStream,
+    ) -> None:
+        """
+        Calibrate the VAD using background noise
+        captured from the selected microphone.
+        """
+
+        calibration_frames: list[np.ndarray] = []
+
+        calibration_started = time.monotonic()
+
+        logger.info(
+            "Calibrating microphone. Please remain silent..."
+        )
+
+        while (
+            time.monotonic() - calibration_started
+            < self.config.vad_calibration_duration
+        ):
+            frame = self._read_frame(stream)
+
+            calibration_frames.append(frame)
+
+        self.vad.calibrate(
+            calibration_frames,
+            threshold_multiplier=self.config.vad_threshold_multiplier,
+        )
+
+        logger.info(
+            "VAD calibrated | Noise floor: %.5f | "
+            "Threshold: %.5f",
+            self.vad.noise_floor,
+            self.vad.config.energy_threshold,
+        )

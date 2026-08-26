@@ -29,3 +29,5 @@ class VoiceConfig:
     max_recording_duration: float = 20.0        # Maximum recording duration (seconds).
     speech_start_timeout: float = 10.0         # Timeout for detecting the start of a voice command
     pre_roll_frames: int = 10                   # Number of frames to keep before speech starts.
+    vad_calibration_duration: float = 1.0
+    vad_threshold_multiplier: float = 3.0

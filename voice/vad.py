@@ -128,38 +128,47 @@ class VoiceActivityDetector:
 
     def reset(self) -> None:
         """
-        Reset detector state.
+        Reset speech and silence counters.
         """
 
         self._speech_counter = 0
         self._silence_counter = 0
 
+    
     def calibrate(
-            self,
-            samples: list[np.ndarray],
+        self,
+        samples: list[np.ndarray],
+        threshold_multiplier: float = 3.0,
     ) -> None:
         """
-        Learn the background noise level.
+        Learn the background noise level and adjust
+        the speech detection threshold.
         """
 
         if not samples:
             return
 
-        energies = [
+        energies = np.array([
             self.rms(frame)
             for frame in samples
-        ]
+        ])
 
-        self._noise_floor  = float(
-            np.mean(energies)
+        self._noise_floor = float(
+            np.median(energies)
         )
 
-        self.config.energy_threshold = (
-            self._noise_floor * 3.0
+        noise_std = float(
+            np.std(energies)
+        )
+
+        self.config.energy_threshold = max(
+            self._noise_floor
+            + (threshold_multiplier * noise_std),
+            0.01,
         )
 
         self._calibrated = True
-    
+
     @property
     def silence_detected(self) -> bool:
         """

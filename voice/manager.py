@@ -1,7 +1,6 @@
 """Manages microphone selection."""
 
 from utils.logger import get_logger
-
 from voice.device import AudioDevice
 from voice.discovery import AudioDevices
 from voice.exceptions import DeviceNotFoundError
