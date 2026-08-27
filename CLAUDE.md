@@ -191,38 +191,66 @@ requested.
 
 Current phase:
 
-PHASE 0 — BASELINE FREEZE AND ARCHITECTURE CONTRACT
+PHASE 1 — VOICE RELIABILITY HARDENING
 
-The purpose of this phase is to:
+Phase 0 — BASELINE FREEZE AND ARCHITECTURE CONTRACT: COMPLETE
+Phase 0 completion commit: bd53cbe
 
-- Preserve the working system
-- Inspect the repository
-- Document the current architecture
-- Verify tests
-- Verify linting
-- Establish development rules
-- Establish the Claude Code workflow
-- Identify known issues
-- Prepare the repository for future phased development
+The purpose of Phase 1 is to harden the EXISTING working voice pipeline.
 
-During Phase 0:
+Existing working functionality that must be preserved:
+- Windows WASAPI microphone discovery
+- Multiple microphone support
+- Saved microphone selection
+- Device-specific sample rates
+- Dynamic channel handling
+- Mono/stereo compatibility
+- VAD
+- Background calibration
+- Pre-roll
+- speech-start timeout
+- silence-based termination
+- maximum recording duration
+- WAV recording
+- AudioValidator
+- Faster-Whisper
+- continuous listening
 
-DO NOT implement:
+VERIFIED PHASE 1 ISSUES:
+1. VAD/background calibration currently executes on every recording.
+2. The calibration threshold can vary significantly between commands.
+3. Calibration currently consumes part of speech_start_timeout because the timeout clock starts before calibration completes.
+4. Whisper can successfully return empty/whitespace transcription text, which is currently routed as an UNKNOWN command.
 
-- AI brain
-- LLM routing
+PHASE 1 SUB-PHASES:
+- Phase 1A — Diagnosis and implementation planning: COMPLETE
+- Phase 1B — VAD calibration persistence and speech-start timeout correction: NEXT
+- Phase 1C — Empty transcription handling
+- Phase 1D — Full regression and three-microphone manual acceptance
+
+During Phase 1 DO NOT implement:
+- TTS
+- wake word
+- AI/LLM integration
+- JARVIS Runtime
+- State Manager
+- Event Bus
+- Tool Registry
+- Authority Engine
 - Desktop automation
 - Browser automation
 - Memory
-- Agents
-- TTS
-- Wake word
-- HUD
+- Workspaces
 - Workflows
+- Agents
 - Vision
+- HUD/UI
 - Phone integration
 
-unless the user explicitly changes the active phase.
+Do not replace Faster-Whisper.
+Do not replace the existing RMS-based VAD.
+Do not introduce WebRTC VAD or another VAD dependency during this phase unless later explicitly approved because the existing implementation has been proven inadequate.
+Do not reorganize the repository.
 
 
 # 8. CLAUDE CODE WORKFLOW
