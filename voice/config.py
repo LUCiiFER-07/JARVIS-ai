@@ -31,3 +31,20 @@ class VoiceConfig:
     pre_roll_frames: int = 10                   # Number of frames to keep before speech starts.
     vad_calibration_duration: float = 1.0
     vad_threshold_multiplier: float = 3.0
+
+    # --------------------------
+    # Calibration Stability (Phase 1D)
+    # --------------------------
+
+    # Percentile used to estimate the robust upper noise level during calibration.
+    # P90 ignores the top ~10% of calibration frames, preventing isolated spikes
+    # from dominating the threshold.
+    vad_calibration_percentile: float = 90.0
+
+    # Maximum number of calibration retries after a degenerate window.
+    # 1 initial window + 2 retries = 3 windows maximum.
+    vad_calibration_max_retries: int = 2
+
+    # Duration for which newly opened microphone input is drained before initial calibration
+    # to allow device/driver/noise-cancellation transient settling.
+    vad_stream_settle_duration: float = 2.0

@@ -25,3 +25,9 @@ class ModelLoadError(SpeechError):
     """
     Raised when the Whisper model cannot be loaded.
     """
+
+
+class EmptyTranscriptionError(SpeechError):
+    """
+    Raised when speech recognition returns an empty or whitespace-only transcription.
+    """

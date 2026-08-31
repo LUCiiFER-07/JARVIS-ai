@@ -90,6 +90,9 @@ class VoiceService:
 
         Returns:
             Speech recognition result.
+
+        Raises:
+            EmptyTranscriptionError: If transcription returns empty/whitespace-only text.
         """
 
         audio_path = self.record(filename)

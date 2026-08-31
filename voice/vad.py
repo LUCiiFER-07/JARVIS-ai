@@ -7,9 +7,8 @@ The detector is intentionally independent of the recorder so it can be reused la
 - Wake-word detection
 - Continuous listening
 - Streaming transcription
-- Conversation made
+- Conversation mode
 """
-
 
 from __future__ import annotations
 
@@ -24,14 +23,15 @@ class VADConfig:
     Configuration for Voice Activity Detection (VAD).
     """
 
-    #Initial RMS threshold.
+    # Initial RMS threshold.
     energy_threshold: float = 0.015
 
-    #Number of consecutive speech frames required.
+    # Number of consecutive speech frames required.
     speech_frames: int = 3
 
-    #number of consecutive silent frames required.
+    # Number of consecutive silent frames required.
     silence_frames: int = 20
+
 
 class VoiceActivityDetector:
     """
@@ -51,6 +51,9 @@ class VoiceActivityDetector:
         self._noise_floor = 0.0
         self._calibrated = False
 
+        # Preserved base threshold for robust calibration analysis.
+        self._base_energy_threshold = self.config.energy_threshold
+
     @property
     def noise_floor(self) -> float:
         """
@@ -66,6 +69,13 @@ class VoiceActivityDetector:
         """
 
         return self._calibrated
+
+    @property
+    def base_energy_threshold(self) -> float:
+        """
+        Base energy threshold configured at startup.
+        """
+        return self._base_energy_threshold
 
     @staticmethod
     def rms(
@@ -104,25 +114,23 @@ class VoiceActivityDetector:
     ) -> tuple[bool, float]:
         """
         Process one frame of audio.
-        
+
         Returns:
             (speech_detected, rms_energy)
         """
-
         energy = self.rms(audio)
+        above_threshold = energy >= self.config.energy_threshold
 
-        if energy >= self.config.energy_threshold:
-
+        # 1. Update counters FIRST
+        if above_threshold:
             self._speech_counter += 1
             self._silence_counter = 0
-
         else:
             self._silence_counter += 1
             self._speech_counter = 0
 
-        speech_detected = (
-            self._speech_counter >= self.config.speech_frames
-        )
+        # 2. THEN update speech_detected
+        speech_detected = self._speech_counter >= self.config.speech_frames
 
         return speech_detected, energy
 
@@ -134,40 +142,55 @@ class VoiceActivityDetector:
         self._speech_counter = 0
         self._silence_counter = 0
 
-    
+    def analyze_calibration(
+        self,
+        samples: list[np.ndarray],
+        percentile: float = 90.0,
+    ) -> tuple[float, float, bool]:
+        """
+        Analyze calibration samples using robust statistics.
+
+        Returns:
+            (threshold, noise_floor_estimate, is_degenerate)
+        """
+        if not samples:
+            return self.config.energy_threshold, 0.0, True
+
+        energies = np.array([self.rms(frame) for frame in samples])
+        noise_floor = float(np.median(energies))
+        noise_ceiling = float(np.percentile(energies, percentile))
+
+        # Degenerate: microphone is effectively silent (lower than base noise threshold)
+        is_degenerate = noise_ceiling < self._base_energy_threshold
+
+        if is_degenerate:
+            return 0.0, noise_floor, True
+
+        # Formula: threshold = noise_ceiling + base_threshold
+        threshold = noise_ceiling + self._base_energy_threshold
+        return threshold, noise_floor, False
+
+    def apply_calibration(self, threshold: float, noise_floor: float) -> None:
+        """Store accepted calibration state."""
+        self.config.energy_threshold = threshold
+        self._noise_floor = noise_floor
+        self._calibrated = True
+
     def calibrate(
         self,
         samples: list[np.ndarray],
         threshold_multiplier: float = 3.0,
     ) -> None:
         """
-        Learn the background noise level and adjust
-        the speech detection threshold.
+        Wrapper for legacy API compatibility.
+
+        The `threshold_multiplier` parameter is ignored.
+        Calibration uses the robust P90 + base_threshold formula
+        implemented in analyze_calibration().
         """
-
-        if not samples:
-            return
-
-        energies = np.array([
-            self.rms(frame)
-            for frame in samples
-        ])
-
-        self._noise_floor = float(
-            np.median(energies)
-        )
-
-        noise_std = float(
-            np.std(energies)
-        )
-
-        self.config.energy_threshold = max(
-            self._noise_floor
-            + (threshold_multiplier * noise_std),
-            0.01,
-        )
-
-        self._calibrated = True
+        threshold, noise_floor, is_degenerate = self.analyze_calibration(samples)
+        if not is_degenerate:
+            self.apply_calibration(threshold, noise_floor)
 
     @property
     def silence_detected(self) -> bool:
@@ -178,4 +201,4 @@ class VoiceActivityDetector:
         return (
             self._silence_counter
             >= self.config.silence_frames
-        )    
+        )

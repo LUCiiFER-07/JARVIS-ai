@@ -8,6 +8,7 @@ from utils.logger import get_logger
 
 logger = get_logger(__name__)
 from speech.config import SpeechConfig
+from speech.exceptions import EmptyTranscriptionError
 from speech.models import SpeechResult
 from speech.validator import AudioValidator
 from speech.whisper import FasterWhisperRecognizer
@@ -54,5 +55,13 @@ class SpeechService:
         logger.info(
             "Speech recognition completed."
         )
+
+        if not result.text or not result.text.strip():
+            logger.warning(
+                "Speech recognition returned empty transcription."
+            )
+            raise EmptyTranscriptionError(
+                "Speech recognition returned empty transcription."
+            )
 
         return result

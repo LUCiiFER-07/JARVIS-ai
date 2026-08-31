@@ -195,21 +195,25 @@ class VoiceRecorder:
         recorded_frames: list[np.ndarray] = []
         recording = False
 
-        # Reset VAD before every recording.
+        # Reset VAD transient state before every recording.
+        # Calibration state (noise floor, threshold) is preserved.
         self.vad.reset()
         self._clear_pre_roll()
-
-        # Track when listening begins.
-        listening_started = time.monotonic()
 
         # Will be assigned when speech starts.
         recording_started: float | None = None
 
         with self._create_stream() as stream:
 
-            self._calibrate(stream)
+            # Calibrate only on first use; reuse existing calibration thereafter.
+            if not self.vad.calibrated:
+                self._settle_stream(stream)
+                self._calibrate(stream)
 
             logger.info("Listening...")
+
+            # Track when listening begins (after calibration).
+            listening_started = time.monotonic()
 
             while True:
 
@@ -339,39 +343,101 @@ class VoiceRecorder:
                 "Failed to record audio."
         ) from error
 
+    def _settle_stream(
+            self,
+            stream: sd.InputStream,
+    ) -> None:
+        """
+        Discard microphone frames during stream startup settling.
+        Keeps the stream open; does not feed frames to VAD, pre-roll,
+        or calibration.
+        """
+        duration = self.config.vad_stream_settle_duration
+
+        if duration <= 0:
+            return
+
+        logger.info(
+            "Stabilizing microphone stream for %.1f seconds...",
+            duration,
+        )
+
+        started = time.monotonic()
+
+        while time.monotonic() - started < duration:
+            self._read_frame(stream)
+
     def _calibrate(
         self,
         stream: sd.InputStream,
     ) -> None:
         """
-        Calibrate the VAD using background noise
-        captured from the selected microphone.
+        Calibrate the VAD using background noise with bounded retries.
+
+        Retries on degenerate windows (near-zero energy) up to
+        vad_calibration_max_retries times.
+        Raises RecordingError if all attempts fail.
         """
 
-        calibration_frames: list[np.ndarray] = []
+        max_retries = self.config.vad_calibration_max_retries
+        percentile = self.config.vad_calibration_percentile
 
-        calibration_started = time.monotonic()
+        for attempt in range(max_retries + 1):
+            calibration_frames: list[np.ndarray] = []
 
-        logger.info(
-            "Calibrating microphone. Please remain silent..."
-        )
+            calibration_started = time.monotonic()
 
-        while (
-            time.monotonic() - calibration_started
-            < self.config.vad_calibration_duration
-        ):
-            frame = self._read_frame(stream)
+            if attempt == 0:
+                logger.info(
+                    "Calibrating microphone. Please remain silent..."
+                )
+            else:
+                logger.info(
+                    "Calibration retry %d/%d. Please remain silent...",
+                    attempt,
+                    max_retries,
+                )
 
-            calibration_frames.append(frame)
+            while (
+                time.monotonic() - calibration_started
+                < self.config.vad_calibration_duration
+            ):
+                frame = self._read_frame(stream)
 
-        self.vad.calibrate(
-            calibration_frames,
-            threshold_multiplier=self.config.vad_threshold_multiplier,
-        )
+                calibration_frames.append(frame)
 
-        logger.info(
-            "VAD calibrated | Noise floor: %.5f | "
-            "Threshold: %.5f",
-            self.vad.noise_floor,
-            self.vad.config.energy_threshold,
-        )
+            threshold, noise_floor, is_degenerate = self.vad.analyze_calibration(
+                calibration_frames,
+                percentile=percentile,
+            )
+
+            if is_degenerate:
+                logger.warning(
+                    "Calibration window degenerate (P%.0f < base threshold %.5f). "
+                    "Noise floor: %.5f",
+                    percentile,
+                    self.vad.base_energy_threshold,
+                    noise_floor,
+                )
+                if attempt < max_retries:
+                    continue
+                logger.error(
+                    "Calibration failed after %d retries.",
+                    max_retries,
+                )
+                raise RecordingError(
+                    "Calibration failed: microphone produces near-zero energy. "
+                    "Please check microphone selection and noise suppression settings."
+                )
+
+            self.vad.apply_calibration(threshold, noise_floor)
+
+            logger.info(
+                "VAD calibrated | Noise floor: %.5f | "
+                "Threshold: %.5f (P%.0f + base %.5f)",
+                self.vad.noise_floor,
+                self.vad.config.energy_threshold,
+                percentile,
+                self.vad.base_energy_threshold,
+            )
+            break
