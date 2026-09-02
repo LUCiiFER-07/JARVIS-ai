@@ -5,6 +5,7 @@ Owns startup, lifecycle, state management, and one command iteration loop.
 """
 
 from core.commands import CommandType
+from core.events import EventBus
 from core.executor import CommandExecutor
 from core.parser import CommandParser
 from core.state import JarvisState, StateManager
@@ -28,10 +29,17 @@ class JarvisRuntime:
         voice: VoiceService,
         executor: CommandExecutor,
         state_manager: StateManager,
+        event_bus: EventBus | None = None,
     ) -> None:
         self._voice = voice
         self._executor = executor
         self._state_manager = state_manager
+        self._event_bus = event_bus
+
+    @property
+    def event_bus(self) -> EventBus | None:
+        """Return the event bus instance."""
+        return self._event_bus
 
     @property
     def state_manager(self) -> StateManager:

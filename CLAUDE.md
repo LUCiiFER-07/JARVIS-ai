@@ -191,12 +191,24 @@ requested.
 
 Current phase:
 
-PHASE 1 — VOICE RELIABILITY HARDENING
+PHASE 5 — EVENT SYSTEM
 
 Phase 0 — BASELINE FREEZE AND ARCHITECTURE CONTRACT: COMPLETE
 Phase 0 completion commit: bd53cbe
 
-The purpose of Phase 1 is to harden the EXISTING working voice pipeline.
+Phase 1 — VOICE RELIABILITY HARDENING: COMPLETE
+Phase 1 completion commit: (checkpoint)
+
+Phase 2 — DETERMINISTIC COMMAND UNDERSTANDING: COMPLETE
+Phase 2 completion commit: 9c239c8 / abf0dca
+
+Phase 3 — RUNTIME FOUNDATION: COMPLETE
+Phase 3 completion commit: 19b5eab
+
+Phase 4 — CENTRAL STATE MANAGER: COMPLETE
+Phase 4 completion commit: caa2182
+
+The purpose of Phase 5 is to introduce an event system (Event Bus) for decoupled component communication across JARVIS, allowing components to publish and subscribe to application events without tight coupling.
 
 Existing working functionality that must be preserved:
 - Windows WASAPI microphone discovery
@@ -215,26 +227,16 @@ Existing working functionality that must be preserved:
 - AudioValidator
 - Faster-Whisper
 - continuous listening
+- Deterministic command parser
+- Command executor
+- Greeting command, time command, exit command, calculator
+- JarvisRuntime foundation
+- Central State Manager (StateManager & JarvisState)
 
-VERIFIED PHASE 1 ISSUES:
-1. VAD/background calibration currently executes on every recording.
-2. The calibration threshold can vary significantly between commands.
-3. Calibration currently consumes part of speech_start_timeout because the timeout clock starts before calibration completes.
-4. Whisper can successfully return empty/whitespace transcription text, which is currently routed as an UNKNOWN command.
-
-PHASE 1 SUB-PHASES:
-- Phase 1A — Diagnosis and implementation planning: COMPLETE
-- Phase 1B — VAD calibration persistence and speech-start timeout correction: NEXT
-- Phase 1C — Empty transcription handling
-- Phase 1D — Full regression and three-microphone manual acceptance
-
-During Phase 1 DO NOT implement:
+During Phase 5 DO NOT implement:
 - TTS
 - wake word
 - AI/LLM integration
-- JARVIS Runtime
-- State Manager
-- Event Bus
 - Tool Registry
 - Authority Engine
 - Desktop automation
@@ -249,7 +251,6 @@ During Phase 1 DO NOT implement:
 
 Do not replace Faster-Whisper.
 Do not replace the existing RMS-based VAD.
-Do not introduce WebRTC VAD or another VAD dependency during this phase unless later explicitly approved because the existing implementation has been proven inadequate.
 Do not reorganize the repository.
 
 

@@ -1,11 +1,13 @@
 """
-Central State Manager for JARVIS (Phase 4).
+Central State Manager for JARVIS (Phase 5).
 
-Defines authoritative application states and state transition logic.
+Defines authoritative application states and state transition logic, with EventBus integration.
 """
 
 from enum import Enum
 from typing import ClassVar
+
+from core.events import EventBus, EventType
 
 
 class JarvisState(Enum):
@@ -55,8 +57,13 @@ class StateManager:
         JarvisState.ERROR: {JarvisState.IDLE, JarvisState.OFFLINE},
     }
 
-    def __init__(self, initial_state: JarvisState = JarvisState.OFFLINE) -> None:
+    def __init__(
+        self,
+        initial_state: JarvisState = JarvisState.OFFLINE,
+        event_bus: EventBus | None = None,
+    ) -> None:
         self._current_state = initial_state
+        self._event_bus = event_bus
 
     @property
     def current_state(self) -> JarvisState:
@@ -80,4 +87,14 @@ class StateManager:
                 f"Invalid state transition from {self._current_state.name} to {new_state.name}"
             )
 
+        old_state = self._current_state
         self._current_state = new_state
+
+        if self._event_bus:
+            self._event_bus.publish_type(
+                EventType.STATE_CHANGED,
+                {
+                    "old_state": old_state,
+                    "new_state": new_state,
+                },
+            )
