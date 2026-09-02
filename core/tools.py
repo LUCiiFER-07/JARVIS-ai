@@ -3,6 +3,11 @@ Tool Contract and Registry for JARVIS (Phase 6).
 
 Provides the foundational architecture for tool definition, input validation,
 structured results, exceptions, and deterministic tool registration and lookup.
+
+Tool Execution Contract:
+- Input validation errors (contract violations) raise ToolValidationError.
+- Unexpected internal handler errors (programmer/contract failures) raise ToolExecutionError.
+- Normal tool-operation failures (e.g., file not found, API error) return ToolResult(success=False).
 """
 
 import re
@@ -31,17 +36,20 @@ class ToolAlreadyRegisteredError(ToolError):
 
 
 class ToolValidationError(ToolError):
-    """Raised when tool input validation fails."""
+    """Raised when tool input validation fails (contract violation)."""
 
 
 class ToolExecutionError(ToolError):
-    """Raised when tool execution encounters an error."""
+    """Raised when tool execution encounters an unexpected internal error (programmer/contract failure)."""
 
 
 @dataclass(frozen=True)
 class ToolResult:
     """
     Structured result contract returned by tool execution.
+
+    NOTE on immutability: frozen=True only prevents attribute reassignment.
+    Mutable objects within the 'data' field (e.g., dicts, lists) are NOT deeply frozen.
     """
 
     success: bool
@@ -54,6 +62,9 @@ class ToolResult:
 class Tool:
     """
     Represents a registered tool capability in JARVIS.
+
+    Registration in ToolRegistry means "this capability exists."
+    It does NOT imply "this capability is permitted." (Phase 7 Authority handles permissions).
     """
 
     name: str
@@ -73,6 +84,12 @@ class Tool:
     def validate_input(self, input_data: dict[str, Any]) -> Any:
         """
         Validate input_data against input_schema if defined.
+
+        Phase 6 Validation Guarantees:
+        - If input_schema is a dataclass, input_data must be a dict that can successfully instantiate it.
+        - If input_data is already an instance of the schema, it is returned as-is.
+        - Arbitrary dicts are NOT blindly accepted if a schema is defined.
+        - Does NOT validate individual primitive field types beyond what the dataclass constructor enforces.
         """
         if self.input_schema is None:
             return input_data
@@ -82,6 +99,10 @@ class Tool:
             try:
                 if isinstance(input_data, self.input_schema):
                     return input_data
+                if not isinstance(input_data, dict):
+                    raise ToolValidationError(
+                        f"Invalid input type for tool '{self.name}': Expected dict, got {type(input_data).__name__}."
+                    )
                 return self.input_schema(**input_data)
             except TypeError as e:
                 raise ToolValidationError(f"Invalid input for tool '{self.name}': {e}") from e
@@ -91,10 +112,15 @@ class Tool:
     def execute(self, input_data: dict[str, Any] | Any = None) -> ToolResult:
         """
         Validate input and execute tool handler, returning a structured ToolResult.
+
+        Semantic distinction:
+        - ToolValidationError: Bad input / contract violation (programmer or caller error).
+        - ToolExecutionError: Unexpected internal failure (programmer error / infrastructure issue).
+        - ToolResult(success=False): Normal tool-operation failure (expected runtime condition).
         """
         data = input_data if input_data is not None else {}
         try:
-            validated_input = self.validate_input(data if isinstance(data, dict) else {})
+            validated_input = self.validate_input(data)
             if isinstance(validated_input, dict):
                 result = self.handler(**validated_input)
             elif hasattr(validated_input, "__dataclass_fields__"):
@@ -115,6 +141,12 @@ class ToolRegistry:
     """
     Central registry for JARVIS tools. Manages deterministic tool registration,
     lookup, unregistration, and listing.
+
+    SECURITY INVARIANT:
+    ToolRegistry is NOT a security boundary. Registration means capability exists,
+    not that it is permitted. Phase 7 Authority Engine will handle permission decisions.
+
+    Registry does NOT execute tools.
     """
 
     def __init__(self) -> None:

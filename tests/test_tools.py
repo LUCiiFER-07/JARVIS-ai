@@ -215,3 +215,144 @@ def test_registry_isolation() -> None:
 
     assert reg1.has("shared.name") is True
     assert reg2.has("shared.name") is False
+
+
+# -----------------------------------------------------------------------------
+# Phase 6 Authority-Readiness Hardening Review
+# -----------------------------------------------------------------------------
+
+
+def test_tool_name_rejects_whitespace() -> None:
+    """Tool names with whitespace must be rejected."""
+    with pytest.raises(ToolValidationError):
+        Tool(name="system get_status", description="Bad", handler=dummy_handler)
+
+
+def test_tool_name_rejects_shell_like_syntax() -> None:
+    """Tool names must not contain shell metacharacters."""
+    with pytest.raises(ToolValidationError):
+        Tool(name="system;rm", description="Bad", handler=dummy_handler)
+    with pytest.raises(ToolValidationError):
+        Tool(name="system|rm", description="Bad", handler=dummy_handler)
+    with pytest.raises(ToolValidationError):
+        Tool(name="system$rm", description="Bad", handler=dummy_handler)
+
+
+def test_tool_name_rejects_uppercase() -> None:
+    """Tool names must be lowercase (machine-readable convention)."""
+    with pytest.raises(ToolValidationError):
+        Tool(name="System.GetStatus", description="Bad", handler=dummy_handler)
+
+
+def test_tool_name_accepts_nested_domain() -> None:
+    """Tool names with multiple dot-separated segments are allowed."""
+    t = Tool(name="system.status.get", description="Nested", handler=dummy_handler)
+    assert t.name == "system.status.get"
+
+
+def test_wrong_dataclass_type_rejected() -> None:
+    """A tool expecting InputTypeA must not accept an arbitrary other dataclass."""
+    @dataclass
+    class OtherInput:
+        x: str
+
+    tool = Tool(
+        name="math.add",
+        description="Adds",
+        handler=add_handler,
+        input_schema=CalculatorInput,
+    )
+    with pytest.raises(ToolValidationError):
+        tool.execute(OtherInput(x="nope"))
+
+
+def test_non_dict_input_rejected_when_schema_present() -> None:
+    """A non-dict, non-schema instance must be rejected when a schema is defined."""
+    tool = Tool(
+        name="math.add",
+        description="Adds",
+        handler=add_handler,
+        input_schema=CalculatorInput,
+    )
+    with pytest.raises(ToolValidationError):
+        tool.execute("not a dict")
+
+
+def test_dict_input_accepted_when_schema_present() -> None:
+    """A plain dict is still valid if it matches the dataclass schema."""
+    tool = Tool(
+        name="math.add",
+        description="Adds",
+        handler=add_handler,
+        input_schema=CalculatorInput,
+    )
+    result = tool.execute({"a": 1, "b": 2})
+    assert result.success is True
+    assert result.data == 3
+
+
+def test_missing_required_field_raises_validation_error() -> None:
+    """Missing required fields must surface as ToolValidationError."""
+    tool = Tool(
+        name="math.add",
+        description="Adds",
+        handler=add_handler,
+        input_schema=CalculatorInput,
+    )
+    with pytest.raises(ToolValidationError):
+        tool.execute({"a": 1})
+
+
+def test_extra_field_raises_validation_error() -> None:
+    """Unexpected fields must surface as ToolValidationError."""
+    tool = Tool(
+        name="math.add",
+        description="Adds",
+        handler=add_handler,
+        input_schema=CalculatorInput,
+    )
+    with pytest.raises(ToolValidationError):
+        tool.execute({"a": 1, "b": 2, "c": 3})
+
+
+def test_handler_returning_failure_result_not_raised() -> None:
+    """A handler returning ToolResult(success=False) is NOT wrapped in an exception."""
+    def soft_fail() -> ToolResult:
+        return ToolResult(success=False, data=None, message="Expected failure")
+
+    tool = Tool(name="test.softfail", description="Soft fail", handler=soft_fail)
+    result = tool.execute()
+    assert isinstance(result, ToolResult)
+    assert result.success is False
+    assert result.message == "Expected failure"
+
+
+def test_tool_error_propagates_unchanged() -> None:
+    """A handler raising ToolError must propagate without being re-wrapped."""
+    def raise_tool_err() -> None:
+        raise ToolValidationError("custom")
+
+    tool = Tool(name="test.err", description="Err", handler=raise_tool_err)
+    with pytest.raises(ToolValidationError, match="custom"):
+        tool.execute()
+
+
+def test_registry_does_not_expose_execute() -> None:
+    """ToolRegistry must NOT have an execute method (authority bypass prevention)."""
+    reg = ToolRegistry()
+    assert not hasattr(reg, "execute"), (
+        "ToolRegistry must not provide an execute() method; "
+        "execution belongs to a controlled layer after Authority approval."
+    )
+
+
+def test_registry_get_returns_tool_not_authorization() -> None:
+    """Getting a tool returns the Tool itself; it is not an authorization decision."""
+    reg = ToolRegistry()
+    t = Tool(name="system.test", description="Test", handler=dummy_handler)
+    reg.register(t)
+    retrieved = reg.get("system.test")
+    assert retrieved is t
+    # Calling execute on the retrieved Tool is the Tool's own contract, not the registry's.
+    # This test only asserts the registry does not itself execute.
+    assert not callable(getattr(reg, "execute", None))
