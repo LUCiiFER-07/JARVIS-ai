@@ -1,5 +1,5 @@
 """
-Tests for the JARVIS Runtime foundation (Phase 3).
+Tests for the JARVIS Runtime foundation (Phase 3 & 4).
 """
 
 from pathlib import Path
@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 from core.executor import CommandExecutor
 from core.runtime import JarvisRuntime
+from core.state import StateManager
 from speech.exceptions import EmptyTranscriptionError, SpeechError
 from speech.models import SpeechResult
 from voice.exceptions import VoiceError
@@ -25,7 +26,11 @@ def test_runtime_process_command_success() -> None:
     mock_executor = MagicMock(spec=CommandExecutor)
     mock_executor.execute.return_value = "HELLO, SIR! How can I help you?"
 
-    runtime = JarvisRuntime(voice=mock_voice, executor=mock_executor)
+    runtime = JarvisRuntime(
+        voice=mock_voice,
+        executor=mock_executor,
+        state_manager=StateManager(),
+    )
     should_continue = runtime.process_command()
 
     assert should_continue is True
@@ -45,7 +50,11 @@ def test_runtime_process_command_exit() -> None:
     mock_executor = MagicMock(spec=CommandExecutor)
     mock_executor.execute.return_value = "Goodbye, Sir."
 
-    runtime = JarvisRuntime(voice=mock_voice, executor=mock_executor)
+    runtime = JarvisRuntime(
+        voice=mock_voice,
+        executor=mock_executor,
+        state_manager=StateManager(),
+    )
     should_continue = runtime.process_command()
 
     assert should_continue is False
@@ -64,7 +73,11 @@ def test_runtime_run_loop_handles_voice_and_speech_errors() -> None:
     mock_executor = MagicMock(spec=CommandExecutor)
     mock_executor.execute.return_value = "Goodbye, Sir."
 
-    runtime = JarvisRuntime(voice=mock_voice, executor=mock_executor)
+    runtime = JarvisRuntime(
+        voice=mock_voice,
+        executor=mock_executor,
+        state_manager=StateManager(),
+    )
 
     # Should run through voice error, speech error, then exit gracefully
     runtime.run()
@@ -79,7 +92,11 @@ def test_runtime_run_keyboard_interrupt() -> None:
     mock_voice.select_microphone.side_effect = KeyboardInterrupt
 
     mock_executor = MagicMock(spec=CommandExecutor)
-    runtime = JarvisRuntime(voice=mock_voice, executor=mock_executor)
+    runtime = JarvisRuntime(
+        voice=mock_voice,
+        executor=mock_executor,
+        state_manager=StateManager(),
+    )
     runtime.run()
 
     mock_voice.select_microphone.assert_called_once()
@@ -91,7 +108,11 @@ def test_runtime_run_unexpected_fatal_exception() -> None:
     mock_voice.record_and_transcribe.side_effect = RuntimeError("Fatal hardware failure")
 
     mock_executor = MagicMock(spec=CommandExecutor)
-    runtime = JarvisRuntime(voice=mock_voice, executor=mock_executor)
+    runtime = JarvisRuntime(
+        voice=mock_voice,
+        executor=mock_executor,
+        state_manager=StateManager(),
+    )
     runtime.run()
 
     mock_voice.select_microphone.assert_called_once()
@@ -106,7 +127,11 @@ def test_runtime_run_keyboard_interrupt_during_loop() -> None:
     mock_voice.record_and_transcribe.side_effect = KeyboardInterrupt
 
     mock_executor = MagicMock(spec=CommandExecutor)
-    runtime = JarvisRuntime(voice=mock_voice, executor=mock_executor)
+    runtime = JarvisRuntime(
+        voice=mock_voice,
+        executor=mock_executor,
+        state_manager=StateManager(),
+    )
     runtime.run()
 
     mock_voice.select_microphone.assert_called_once()
@@ -125,7 +150,11 @@ def test_runtime_run_empty_transcription_recovery() -> None:
     mock_executor = MagicMock(spec=CommandExecutor)
     mock_executor.execute.return_value = "Goodbye, Sir."
 
-    runtime = JarvisRuntime(voice=mock_voice, executor=mock_executor)
+    runtime = JarvisRuntime(
+        voice=mock_voice,
+        executor=mock_executor,
+        state_manager=StateManager(),
+    )
     runtime.run()
 
     assert mock_voice.select_microphone.called
@@ -145,7 +174,11 @@ def test_runtime_dependency_reuse() -> None:
     mock_executor = MagicMock(spec=CommandExecutor)
     mock_executor.execute.return_value = "Response"
 
-    runtime = JarvisRuntime(voice=mock_voice, executor=mock_executor)
+    runtime = JarvisRuntime(
+        voice=mock_voice,
+        executor=mock_executor,
+        state_manager=StateManager(),
+    )
     runtime.run()
 
     assert runtime._voice is mock_voice
