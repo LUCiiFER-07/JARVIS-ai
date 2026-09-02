@@ -10,6 +10,10 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from utils.logger import get_logger
+
+logger = get_logger(__name__)
+
 
 class EventType(Enum):
     """
@@ -27,10 +31,10 @@ class EventType(Enum):
     JARVIS_STOPPED = "jarvis_stopped"
 
 
-@dataclass
+@dataclass(frozen=True)
 class JarvisEvent:
     """
-    Represents an event published on the JARVIS EventBus.
+    Represents an immutable event published on the JARVIS EventBus.
     """
 
     event_type: EventType
@@ -40,7 +44,8 @@ class JarvisEvent:
 
 class EventBus:
     """
-    Publish-subscribe event bus for decoupled component communication.
+    Publish-subscribe event bus for decoupled component communication with subscriber isolation
+    and reentrant publication safety.
     """
 
     def __init__(self) -> None:
@@ -51,6 +56,7 @@ class EventBus:
     ) -> None:
         """
         Subscribe a callback function to a specific event type.
+        Duplicate subscriptions are ignored.
         """
         if event_type not in self._subscribers:
             self._subscribers[event_type] = []
@@ -62,6 +68,7 @@ class EventBus:
     ) -> None:
         """
         Unsubscribe a callback function from a specific event type.
+        Nonexistent subscriptions are safely ignored.
         """
         if (
             event_type in self._subscribers
@@ -72,10 +79,16 @@ class EventBus:
     def publish(self, event: JarvisEvent) -> None:
         """
         Publish an event to all subscribers registered for its event type.
+        Uses a subscriber snapshot for reentrancy safety and isolates subscriber exceptions.
         """
-        subscribers = self._subscribers.get(event.event_type, [])
+        subscribers = list(self._subscribers.get(event.event_type, []))
         for callback in subscribers:
-            callback(event)
+            try:
+                callback(event)
+            except Exception:
+                logger.exception(
+                    "Error in event subscriber callback for %s", event.event_type.value
+                )
 
     def publish_type(
         self, event_type: EventType, data: dict[str, Any] | None = None
@@ -89,6 +102,6 @@ class EventBus:
 
     def clear(self) -> None:
         """
-        Remove all subscribers (primarily for testing).
+        Remove all subscribers across all event types (primarily for testing).
         """
         self._subscribers.clear()
