@@ -5,6 +5,8 @@ Tests for the JARVIS Central Event System (Phase 5).
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
+
 from core.events import EventBus, EventType, JarvisEvent
 from core.executor import CommandExecutor
 from core.runtime import JarvisRuntime
@@ -109,3 +111,20 @@ def test_runtime_event_bus_integration() -> None:
 
     assert EventType.STATE_CHANGED in event_types_received
     assert runtime.event_bus is bus
+
+
+def test_event_payload_immutability() -> None:
+    """Test event payload cannot be mutated and input dict mutation does not affect event."""
+    raw_data = {"x": 1}
+    event = JarvisEvent(event_type=EventType.JARVIS_STARTED, data=raw_data)
+
+    # 1. Subscribers can read payload values normally
+    assert event.data["x"] == 1
+
+    # 2. Event data cannot be directly mutated (mappingproxy raises TypeError)
+    with pytest.raises(TypeError):
+        event.data["x"] = 2  # type: ignore[index]
+
+    # 3. Mutating original input dict after event creation does not alter event payload
+    raw_data["x"] = 99
+    assert event.data["x"] == 1

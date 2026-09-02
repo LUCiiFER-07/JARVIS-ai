@@ -5,9 +5,10 @@ Defines event types, event data structures, and a lightweight publish-subscribe 
 """
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
+from types import MappingProxyType
 from typing import Any
 
 from utils.logger import get_logger
@@ -34,12 +35,17 @@ class EventType(Enum):
 @dataclass(frozen=True)
 class JarvisEvent:
     """
-    Represents an immutable event published on the JARVIS EventBus.
+    Represents an immutable event published on the JARVIS EventBus with immutable payload.
     """
 
     event_type: EventType
     timestamp: float = field(default_factory=time.time)
-    data: dict[str, Any] = field(default_factory=dict)
+    data: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.data, MappingProxyType):
+            copied = dict(self.data) if self.data else {}
+            object.__setattr__(self, "data", MappingProxyType(copied))
 
 
 class EventBus:
